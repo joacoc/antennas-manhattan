@@ -21,6 +21,16 @@ services:
       - 6875:6875
     depends_on:
       - postgres
+  grafana_dashboard:
+    image: materialize/dashboard
+    container_name: grafana_dashboard
+    restart: always
+    ports:
+      - 3001:3000
+    depends_on:
+      - materialized
+    environment:
+      MATERIALIZED_URL: materialized:6875
   helper:
     container_name: helper
     build:

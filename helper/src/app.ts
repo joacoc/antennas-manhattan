@@ -5,47 +5,47 @@ import { Pool } from "pg";
  * Before creating the views it will check if they aren't created already.
  */
 async function setUpMaterialize() {
-  const pool = await new Pool({
-    host: "materialized",
-    port: 6875,
-    user: "materialize",
-    password: "materialize",
-    database: "materialize",
-  });
-  const poolClient = await pool.connect();
+    const pool = await new Pool({
+        host: "materialized",
+        port: 6875,
+        user: "materialize",
+        password: "materialize",
+        database: "materialize",
+    });
+    const poolClient = await pool.connect();
 
-  await poolClient.query(`
+    await poolClient.query(`
     CREATE MATERIALIZED SOURCE IF NOT EXISTS antennas_publication_source
     FROM POSTGRES
     CONNECTION 'host=postgres port=5432 user=materialize password=materialize dbname=postgres'
     PUBLICATION 'antennas_publication_source';
   `);
 
-  const { rowCount } = await pool.query(
-    "SELECT * FROM mz_views WHERE name='antennas' OR name='antennas_performance';"
-  );
+    const { rowCount } = await pool.query(
+        "SELECT * FROM mz_views WHERE name='antennas' OR name='antennas_performance';"
+    );
 
-  if (!rowCount) {
-    await poolClient.query(`
+    if (!rowCount) {
+        await poolClient.query(`
     CREATE MATERIALIZED VIEWS FROM SOURCE antennas_publication_source;
   `);
 
-    await poolClient.query(`
+        await poolClient.query(`
       CREATE MATERIALIZED VIEW IF NOT EXISTS last_minute_updates AS
       SELECT A.antenna_id, A.geojson, performance, AP.updated_at, ((CAST(EXTRACT( epoch from AP.updated_at) AS NUMERIC) * 1000) + 60000)
       FROM antennas A JOIN antennas_performance AP ON (A.antenna_id = AP.antenna_id)
       WHERE ((CAST(EXTRACT( epoch from AP.updated_at) AS NUMERIC) * 1000) + 60000) > mz_logical_timestamp();
     `);
 
-    await poolClient.query(`
+        await poolClient.query(`
       CREATE MATERIALIZED VIEW IF NOT EXISTS last_minute_performance_per_antenna AS
       SELECT antenna_id, geojson, AVG(performance) as performance
       FROM last_minute_updates
       GROUP BY antenna_id, geojson;
     `);
-  }
+    }
 
-  poolClient.release();
+    poolClient.release();
 }
 
 /**
@@ -54,7 +54,7 @@ async function setUpMaterialize() {
  * @returns
  */
 function buildQuery(antennaId: number) {
-  return `
+    return `
     INSERT INTO antennas_performance (antenna_id, clients_connected, performance, updated_at) VALUES (
       ${antennaId},
       ${Math.ceil(Math.random() * 100)},
@@ -68,27 +68,27 @@ function buildQuery(antennaId: number) {
  * Generate data to Postgres indefinitely
  */
 async function dataGenerator() {
-  const pool = await new Pool({
-    host: "postgres",
-    user: "postgres",
-    password: "pg_password",
-  });
+    const pool = await new Pool({
+        host: "postgres",
+        user: "postgres",
+        password: "pg_password",
+    });
 
-  const poolClient = await pool.connect();
-  setInterval(() => {
-    const query = [1, 2, 3, 4, 5, 6, 7, 8]
-      .map((antennaId) => buildQuery(antennaId))
-      .join("\n");
+    const poolClient = await pool.connect();
+    setInterval(() => {
+        const query = [1, 2, 3, 4, 5, 6, 7]
+            .map((antennaId) => buildQuery(antennaId))
+            .join("\n");
 
-    poolClient.query(query);
-  }, 1000);
+        poolClient.query(query);
+    }, 1000);
 }
 
 setUpMaterialize()
-  .then(() => {
-    console.log("Generating data.");
-    dataGenerator();
-  })
-  .catch((err) => {
-    console.error(err);
-  });
+    .then(() => {
+        console.log("Generating data.");
+        dataGenerator();
+    })
+    .catch((err) => {
+        console.error(err);
+    });
