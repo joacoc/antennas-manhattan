@@ -8,8 +8,8 @@ import { createClient } from 'graphql-ws';
  * Postgres Client
  */
 const postgresPool = new Pool({
-    // host: "postgres",
-    host: "localhost",
+    host: "postgres",
+    // host: "localhost",
     port: 5432,
     user: "postgres",
     password: "pg_password",
@@ -20,8 +20,8 @@ const postgresPool = new Pool({
  * Backend client
  */
 const graphqlClient = createClient({
-    // url: 'ws://backend:4000/graphql',
-    url: 'ws://localhost:4000/graphql',
+    url: 'ws://backend:4000/graphql',
+    // url: 'ws://localhost:4000/graphql',
     webSocketImpl: ws,
     generateID: v4,
 });

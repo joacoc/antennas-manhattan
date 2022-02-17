@@ -10,7 +10,8 @@ import { Pool } from "pg";
  * Materialize Client
  */
 const materializeClient = new MaterializeClient({
-    host: "localhost",
+    // host: "localhost",
+    host: "materialized",
     port: 6875,
     user: "materialize",
     password: "materialize",
@@ -21,7 +22,8 @@ const materializeClient = new MaterializeClient({
  * Postgres Client
  */
 const postgresPool = new Pool({
-    host: "localhost",
+    // host: "localhost",
+    host: "postgres",
     port: 5432,
     user: "postgres",
     password: "pg_password",

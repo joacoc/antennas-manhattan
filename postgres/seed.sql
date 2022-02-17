@@ -17,8 +17,8 @@ INSERT INTO antennas (geojson) VALUES ('{ "type": "Feature", "geometry": { "type
 -- E 30th St & Madison Ave (Helps Antenna ID: 2)
 INSERT INTO antennas (geojson) VALUES ('{ "type": "Feature", "geometry": { "type": "Point", "coordinates": [-73.9821, 40.7488] }, "properties": { "name": "201-217 Madison Ave", "helps": "E 30th St & Madison Ave" } }');
 INSERT INTO antennas (geojson) VALUES ('{ "type": "Feature", "geometry": { "type": "Point", "coordinates": [-73.9793, 40.7434] }, "properties": { "name": "443 3rd Ave", "helps": "E 30th St & Madison Ave" } }');
-INSERT INTO antennas (geojson) VALUES ('{ "type": "Feature", "geometry": { "type": "Point", "coordinates": [-73.9869], 40.7425 }, "properties": { "name": "36 Madison Ave", "helps": "E 30th St & Madison Ave" } }');
-INSERT INTO antennas (geojson) VALUES ('{ "type": "Feature", "geometry": { "type": "Point", "coordinates": [-73.9896], 40.7473 }, "properties": { "name": "856 6th Ave", "helps": "E 30th St & Madison Ave" } }');
+INSERT INTO antennas (geojson) VALUES ('{ "type": "Feature", "geometry": { "type": "Point", "coordinates": [-73.9869, 40.7425] }, "properties": { "name": "36 Madison Ave", "helps": "E 30th St & Madison Ave" } }');
+INSERT INTO antennas (geojson) VALUES ('{ "type": "Feature", "geometry": { "type": "Point", "coordinates": [-73.9896, 40.7473] }, "properties": { "name": "856 6th Ave", "helps": "E 30th St & Madison Ave" } }');
 
 -- W 37th St & 9th Ave (Helps Antenna ID: 3)
 INSERT INTO antennas (geojson) VALUES ('{ "type": "Feature", "geometry": { "type": "Point", "coordinates": [-73.9926, 40.7586] }, "properties": { "name": "W 42nd St & 9th Ave", "helps": "W 37th St & 9th Ave" } }');
@@ -39,7 +39,7 @@ INSERT INTO antennas (geojson) VALUES ('{ "type": "Feature", "geometry": { "type
 INSERT INTO antennas (geojson) VALUES ('{ "type": "Feature", "geometry": { "type": "Point", "coordinates": [-73.9879, 40.7353] }, "properties": { "name": "E 16th St & Irving Pl", "helps": "Ave & E 17th St" } }');
 
 -- Williamsburg Bridge & Pitt St (Helps Antenna ID: 6)
-INSERT INTO antennas (geojson) VALUES ('{ "type": "Feature", "geometry": { "type": "Point", "coordinates": [73.9768, 40.714] }, "properties": { "name": "FDR dr & Williamsburg Bridge", "helps": "Williamsburg Bridge & Pitt St" } }');
+INSERT INTO antennas (geojson) VALUES ('{ "type": "Feature", "geometry": { "type": "Point", "coordinates": [-73.9768, 40.714] }, "properties": { "name": "FDR dr & Williamsburg Bridge", "helps": "Williamsburg Bridge & Pitt St" } }');
 INSERT INTO antennas (geojson) VALUES ('{ "type": "Feature", "geometry": { "type": "Point", "coordinates": [-73.9810, 40.7211] }, "properties": { "name": "12-34 Avenue C", "helps": "Williamsburg Bridge & Pitt St" } }');
 INSERT INTO antennas (geojson) VALUES ('{ "type": "Feature", "geometry": { "type": "Point", "coordinates": [-73.9873, 40.7184] }, "properties": { "name": "85 Delancey St", "helps": "Williamsburg Bridge & Pitt St" } }');
 INSERT INTO antennas (geojson) VALUES ('{ "type": "Feature", "geometry": { "type": "Point", "coordinates": [-73.9851, 40.7130] }, "properties": { "name": "300 Madison St", "helps": "Williamsburg Bridge & Pitt St" } }');

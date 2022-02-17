@@ -53,3 +53,9 @@ services:
       - 3000:3000
     depends_on:
       - backend
+  microservice:
+    container_name: microservice
+    build:
+      context: ./microservice
+    depends_on:
+      - backend
