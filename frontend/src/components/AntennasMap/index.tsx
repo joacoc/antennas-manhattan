@@ -1,8 +1,9 @@
-import React, { useRef, useEffect, useCallback } from "react";
+import React, { useRef, useEffect, useCallback, useMemo } from "react";
 import { buildPulsingDot } from "./DotClone";
 import { gql, useMutation, useSubscription } from "@apollo/client";
 import { Button, Box, ListItem, Text, UnorderedList } from "@chakra-ui/react";
 import mapboxgl, { Map as MapBox } from "mapbox-gl";
+import { buildButtonSelection } from "./ButtonSelection";
 
 /**
  * Subscription
@@ -13,6 +14,7 @@ const SUBSCRIBE_ANTENNAS = gql`
       antenna_id
       geojson
       performance
+      diff
     }
   }
 `;
@@ -51,6 +53,7 @@ interface RawAntenna extends BaseAntenna {
 interface BaseAntenna {
     antenna_id: string;
     performance: number;
+    diff: number;
 }
 
 interface AntennasUpdatesSubscription {
@@ -85,17 +88,17 @@ function setSourceData(
  * @param source Source name
  * @param color Color to be used
  */
-function addPulsingDot(map: any, name: string, source: string, color: string) {
+function addPulsingDot(map: any, name: string, source: string, color: string, size?: number) {
     (map.current as any).addImage(
         name,
-        buildPulsingDot(map.current as any, color),
+        buildPulsingDot(map.current as any, color, size || 30),
         {
             pixelRatio: 2,
         }
     );
 
     (map.current as any).addLayer({
-        id: `${name}-dot-point`,
+        id: name,
         type: "symbol",
         source: source,
         layout: {
@@ -123,8 +126,9 @@ function REPLACE_ME_WITH_YOUR_TOKEN() {
 export default function AntennasMap() {
     const mapContainer = useRef<any>(null);
     const map = useRef<MapBox>(null);
-    const antennasMap = useRef<Map<string, Antenna>>(new Map());
-    const helperAntennasMap = useRef<Map<string, Array<Antenna>>>(new Map());
+    const antennasMapRef = useRef<Map<string, Antenna>>(new Map());
+    const helperAntennasMapRef = useRef<Map<string, Array<Antenna>>>(new Map());
+    const helperAntennasCountMapRef = useRef<Map<string, number>>(new Map());
     const { error, data } = useSubscription<AntennasUpdatesSubscription>(
         SUBSCRIBE_ANTENNAS,
         { fetchPolicy: "network-only", shouldResubscribe: true }
@@ -132,6 +136,7 @@ export default function AntennasMap() {
     const [mutateFunction, { error: mutationError }] = useMutation<AntennasUpdatesSubscription>(
         MUTATE_ANTENNAS,
     );
+    const mainLayers = useMemo(() => ["healthy-antennas-layer", "unhealthy-antennas-layer", "semihealthy-antennas-layer", "healthy-pulsing-dot", "unhealthy-pulsing-dot", "semihealthy-pulsing-dot"], []);
 
     if (error) {
         console.error(error);
@@ -151,6 +156,34 @@ export default function AntennasMap() {
             }
         });
     }, [mutateFunction]);
+
+    const onHelpersClick = useCallback(() => {
+        const { current: mapBox } = map;
+        if (mapBox) {
+            mapBox.setLayoutProperty(
+                "helper-antennas-pulsing-dot",
+                'visibility',
+                'visible'
+            );
+
+            mainLayers.forEach((layer) => mapBox.setLayoutProperty(
+                layer,
+                'visibility',
+                'none'
+            ));
+        }
+    }, [mainLayers]);
+
+    const onMainClick = useCallback(() => {
+        const { current: mapBox } = map;
+        if (mapBox) {
+            mainLayers.forEach((layer) => mapBox.setLayoutProperty(
+                layer,
+                'visibility',
+                'visible'
+            ));
+        }
+    }, [mainLayers]);
 
     const onLoad = useCallback(() => {
         /**
@@ -242,7 +275,8 @@ export default function AntennasMap() {
                 map,
                 "helper-antennas-pulsing-dot",
                 "helper-antennas",
-                "0, 255, 0"
+                "0, 255, 0",
+                50
             );
             addPulsingDot(
                 map,
@@ -262,6 +296,7 @@ export default function AntennasMap() {
                 "unhealthy-antennas",
                 "255, 0, 0"
             );
+            buildButtonSelection(mapBox);
         }
     }, []);
 
@@ -269,10 +304,17 @@ export default function AntennasMap() {
      * Use effects
      */
     useEffect(() => {
+        const { current: mapBox } = map;
+        const { current: antennasMap } = antennasMapRef;
+        const { current: helperAntennasMap } = helperAntennasMapRef;
+        const { current: helperAntennasCount } = helperAntennasCountMapRef;
+
         if (data) {
             const { antennasUpdates: antennasUpdatesData } = data;
 
             if (antennasUpdatesData && antennasUpdatesData.length > 0) {
+                antennasMap.clear();
+
                 antennasUpdatesData.forEach((antennaUpdate) => {
                     const { antenna_id } = antennaUpdate;
 
@@ -281,7 +323,7 @@ export default function AntennasMap() {
                             ...antennaUpdate,
                             geojson: JSON.parse(antennaUpdate.geojson),
                         };
-                        antennasMap.current.set(antenna_id, antenna);
+                        antennasMap.set(antenna_id, antenna);
                     } catch (errParsing) { console.error(errParsing) }
                 });
 
@@ -293,10 +335,8 @@ export default function AntennasMap() {
                 const unhealthy: Array<GeoJSON> = [];
                 const helpers: Array<GeoJSON> = [];
 
-                helperAntennasMap.current.clear();
-
-                Array.from(antennasMap.current.values()).forEach((antenna: Antenna) => {
-                    const { geojson, performance } = antenna;
+                Array.from(antennasMap.values()).forEach((antenna: Antenna) => {
+                    const { geojson, performance, diff } = antenna;
                     const { properties } = geojson;
                     const { helps } = properties;
                     try {
@@ -314,23 +354,36 @@ export default function AntennasMap() {
                                 semiHealthy.push(geojson);
                             }
                         } else {
-                            console.log(helps);
-                            const antennasHelping = helperAntennasMap.current.get(helps) || new Array<Antenna>();
-                            antennasHelping.push(antenna);
-                            helperAntennasMap.current.set(helps, antennasHelping);
-                            console.log(helperAntennasMap);
-                            helpers.push(geojson);
+                            const antennasHelping = helperAntennasMap.get(helps) || new Array<Antenna>();
+
+                            if (diff === 1) {
+                                antennasHelping.push(antenna);
+                                helperAntennasMap.set(helps, antennasHelping);
+                            } else {
+                                const removeCounter = helperAntennasCount.get(helps) || 0;
+
+                                if (removeCounter === 3) {
+                                    helperAntennasMap.delete(helps);
+                                } else {
+                                    helperAntennasCount.set(helps, removeCounter + 1);
+                                }
+                            }
                         }
                     } catch (errParsing) {
                         console.error(errParsing);
                     }
                 });
 
-                if (map.current) {
-                    setSourceData(map.current, "healthy-antennas", healthy);
-                    setSourceData(map.current, "unhealthy-antennas", unhealthy);
-                    setSourceData(map.current, "semihealthy-antennas", semiHealthy);
-                    setSourceData(map.current, "helper-antennas", helpers);
+                /**
+                 * Flap helper antennas into one array
+                 */
+                Array.from(helperAntennasMap.values()).forEach(x => helpers.push(...x.map(y => y.geojson)));
+
+                if (mapBox) {
+                    setSourceData(mapBox, "healthy-antennas", healthy);
+                    setSourceData(mapBox, "unhealthy-antennas", unhealthy);
+                    setSourceData(mapBox, "semihealthy-antennas", semiHealthy);
+                    setSourceData(mapBox, "helper-antennas", helpers);
                 }
             }
         }
@@ -357,62 +410,70 @@ export default function AntennasMap() {
     });
 
     return (
-        <Box
-            display={"flex"}
-            width={"100%"}
-            height={"65%"}
-            paddingX={"5rem"}
-            overflow={"hidden"}
-        >
-            <UnorderedList
-                minWidth={"400px"}
-                maxWidth={"400px"}
-                marginRight={"4rem"}
-                textAlign={"left"}
-                overflow={"scroll"}
-            >
-                {Array.from(antennasMap.current.values())
-                    .filter(x => x.geojson.properties.helps === undefined)
-                    .map((x) => {
-                        return (
-                            <ListItem key={x.antenna_id} marginBottom={"10px"}>
-                                <Box display={"flex"}>
-                                    <Text
-                                        fontSize={"2xl"}
-                                        textOverflow={"ellipsis"}
-                                        overflow={"hidden"}
-                                        whiteSpace={"nowrap"}
-                                        color={"gray.300"}
-                                        width={"200px"}
-                                    >
-                                        <span style={{ fontWeight: 300 }}>Performance:</span>{" "}
-                                        <b>{x.performance.toString().substring(0, 4)}</b>
-                                    </Text>
-                                    {helperAntennasMap.current.has(x.geojson.properties.name) && <span>🛠️</span>}
-                                </Box>
-                                <Box display={"flex"} fontSize={"md"}>
-                                    <Text
-                                        textOverflow={"ellipsis"}
-                                        overflow={"hidden"}
-                                        whiteSpace={"nowrap"}
-                                        color={"gray.500"}
-                                        fontWeight={400}
-                                    >
-                                        📡 {x.geojson.properties.name}
-                                    </Text>
-                                    <Button id={x.antenna_id} onClick={onHighVoltageCrashClick} size="xs" marginLeft="0.5rem">⚡</Button>
-                                </Box>
-                            </ListItem>
-                        );
-                    })}
-            </UnorderedList>
+        // <Box display={"flex"} flexDir={"row"}>
+        <Box height={"100%"}>
             <Box
-                id="map"
+                display={"flex"}
                 width={"100%"}
-                boxShadow={"xl"}
-                ref={mapContainer}
-                className="map"
-            />
+                height={"65%"}
+                paddingX={"5rem"}
+                overflow={"hidden"}
+            >
+                <UnorderedList
+                    minWidth={"400px"}
+                    maxWidth={"400px"}
+                    marginRight={"4rem"}
+                    textAlign={"left"}
+                    overflow={"scroll"}
+                >
+                    {Array.from(antennasMapRef.current.values())
+                        .filter(x => x.geojson.properties.helps === undefined)
+                        .map((x) => {
+                            return (
+                                <ListItem key={x.antenna_id} marginBottom={"10px"}>
+                                    <Box display={"flex"}>
+                                        <Text
+                                            fontSize={"2xl"}
+                                            textOverflow={"ellipsis"}
+                                            overflow={"hidden"}
+                                            whiteSpace={"nowrap"}
+                                            color={"gray.300"}
+                                            width={"200px"}
+                                        >
+                                            <span style={{ fontWeight: 300 }}>Performance:</span>{" "}
+                                            <b>{x.performance.toString().substring(0, 4)}</b>
+                                        </Text>
+                                        {helperAntennasMapRef.current.has(x.geojson.properties.name) && <span>🛠️</span>}
+                                    </Box>
+                                    <Box display={"flex"} fontSize={"md"}>
+                                        <Text
+                                            textOverflow={"ellipsis"}
+                                            overflow={"hidden"}
+                                            whiteSpace={"nowrap"}
+                                            color={"gray.500"}
+                                            fontWeight={400}
+                                        >
+                                            📡 {x.geojson.properties.name}
+                                        </Text>
+                                        <Button id={x.antenna_id} onClick={onHighVoltageCrashClick} size="xs" marginLeft="0.5rem">⚡</Button>
+                                    </Box>
+                                </ListItem>
+                            );
+                        })}
+                </UnorderedList>
+                <Box
+                    id="map"
+                    width={"100%"}
+                    boxShadow={"xl"}
+                    ref={mapContainer}
+                    className="map"
+                />
+            </Box>
+            <Box marginTop={10} marginLeft={"5rem"} textAlign="left">
+                <Button marginRight={10} onClick={onMainClick}>Main</Button>
+                <Button onClick={onHelpersClick}>Helpers</Button>
+            </Box>
         </Box>
     );
+
 }

@@ -38,6 +38,7 @@ const schema = buildSchema(`
     antenna_id: String
     geojson: String
     performance: Float
+    diff: Int
   }
 
   type Query {
@@ -144,6 +145,7 @@ async function* antennasUpdates() {
             const mappedData = data.map((x) => ({
                 ...x,
                 geojson: JSON.stringify(x.geojson),
+                diff: x.mz_diff,
             }));
             results = mappedData;
             resolve(mappedData);

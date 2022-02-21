@@ -101,13 +101,14 @@ const improveAntennaPerformance = async (antennaId, antennaName) => {
                     /**
                      * Clean set and interval
                      */
-                    if (count === 50) {
+                    if (count === 100) {
+                        console.log(`Stopping interval for ${antennaId}`);
                         clearInterval(intervalId);
                         alreadyImprovingSet.delete(antennaId);
                         done();
                     }
                 }
-            }, 500);
+            }, 250);
         }
     });
 }
