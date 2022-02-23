@@ -34,7 +34,7 @@ async function setUpMaterialize() {
       CREATE MATERIALIZED VIEW IF NOT EXISTS last_minute_updates AS
       SELECT A.antenna_id, A.geojson, performance, AP.updated_at, ((CAST(EXTRACT( epoch from AP.updated_at) AS NUMERIC) * 1000) + 60000)
       FROM antennas A JOIN antennas_performance AP ON (A.antenna_id = AP.antenna_id)
-      WHERE ((CAST(EXTRACT( epoch from AP.updated_at) AS NUMERIC) * 1000) + 15000) > mz_logical_timestamp();
+      WHERE ((CAST(EXTRACT( epoch from AP.updated_at) AS NUMERIC) * 1000) + 60000) > mz_logical_timestamp();
     `);
 
     await poolClient.query(`
