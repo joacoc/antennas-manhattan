@@ -1,9 +1,9 @@
 import { Transform } from "stream";
 
 interface Antenna {
-    antenna_id: string;
-    geojson: string;
-    performance: number;
+  antenna_id: string;
+  geojson: string;
+  performance: number;
 }
 
 /**
@@ -12,43 +12,40 @@ interface Antenna {
  * A timeout is needed in case the batch length is lower than the highwatermark for a long period of time.
  */
 export default class TransformStream extends Transform {
-    batchMap = new Map<string, Antenna>();
+  batch = new Array<Antenna>();
 
-    size: number;
+  size: number;
 
-    constructor() {
-        super({
-            highWaterMark: 100,
-            objectMode: true,
-        });
+  constructor() {
+    super({
+      highWaterMark: 100,
+      objectMode: true,
+    });
 
-        this.cleanBatch();
+    this.cleanBatch();
+  }
+
+  cleanBatch() {
+    this.batch = new Array<Antenna>();
+  }
+
+  _transform(row: any, encoding: string, callback: () => void) {
+    const { mz_progressed: mzProgressed } = row;
+
+    if (mzProgressed) {
+      this.push(this.batch);
+      this.cleanBatch();
+    } else {
+      this.batch.push(row);
     }
+    callback();
+  }
 
-    cleanBatch() {
-        this.batchMap = new Map<string, Antenna>();
+  _flush(callback: () => void) {
+    if (this.batch.length) {
+      this.push(this.batch);
+      this.cleanBatch();
     }
-
-    _transform(row: any, encoding: string, callback: () => void) {
-        const {
-            mz_progressed: mzProgressed,
-            antenna_id: antennaId,
-        } = row;
-
-        if (mzProgressed) {
-            this.push(Array.from(this.batchMap.values()));
-            this.cleanBatch();
-        } else {
-            this.batchMap.set(antennaId, row);
-        }
-        callback();
-    }
-
-    _flush(callback: () => void) {
-        if (this.batchMap.size) {
-            this.push(Array.from(this.batchMap.values()));
-            this.cleanBatch();
-        }
-        callback();
-    }
+    callback();
+  }
 }
