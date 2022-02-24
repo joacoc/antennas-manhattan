@@ -14,7 +14,7 @@ services:
       - "-c"
       - "wal_level=logical"
   materialized:
-    image: materialize/materialized
+    image: materialize/materialized:v0.20.0
     container_name: materialized
     restart: always
     ports:

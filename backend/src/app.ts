@@ -156,8 +156,8 @@ async function* antennasUpdates() {
 
     materializeClient
       .tail(
-        // "TAIL (SELECT * FROM last_minute_performance_per_antenna WHERE antenna_id = 1 OR antenna_id = 8 OR antenna_id = 9 OR antenna_id = 10)",
-        "TAIL (SELECT * FROM last_minute_performance_per_antenna)",
+        // "TAIL (SELECT * FROM last_half_minute_performance_per_antenna WHERE antenna_id = 1 OR antenna_id = 8 OR antenna_id = 9 OR antenna_id = 10)",
+        "TAIL (SELECT * FROM last_half_minute_performance_per_antenna)",
         eventEmmiter
       )
       .catch((tailErr) => {
