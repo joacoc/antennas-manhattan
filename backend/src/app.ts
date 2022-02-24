@@ -173,7 +173,21 @@ async function* antennasUpdates() {
      * Yield results
      */
     while (!done) {
+      let done = false;
+
+      /**
+       * Avoid lock
+       */
+      const timeoutId = setTimeout(() => {
+        if (done === false) {
+          resolve("Timeout");
+        }
+      }, 1500);
+
       await promise;
+
+      clearTimeout(timeoutId);
+      done = true;
       yield { antennasUpdates: results };
       results = [];
     }
