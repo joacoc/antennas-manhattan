@@ -299,6 +299,12 @@ export default function AntennasMap() {
         mapBox.setLayoutProperty(layer, "visibility", "visible");
         mapBox.setFilter(layer);
       });
+      // Enable helpers too
+      mapBox.setLayoutProperty(
+        "helper-antennas-pulsing-dot",
+        "visibility",
+        "visible"
+      );
     }
   }, [mainLayers]);
 
