@@ -12,7 +12,7 @@ interface Antenna {
  * A timeout is needed in case the batch length is lower than the highwatermark for a long period of time.
  */
 export default class TransformStream extends Transform {
-  batchMap = new Map<string, Antenna>();
+  batch = new Array<Antenna>();
 
   size: number;
 
@@ -26,30 +26,24 @@ export default class TransformStream extends Transform {
   }
 
   cleanBatch() {
-    this.batchMap = new Map<string, Antenna>();
+    this.batch = new Array<Antenna>();
   }
 
   _transform(row: any, encoding: string, callback: () => void) {
-    const {
-      mz_progressed: mzProgressed,
-      mz_diff: mzDiff,
-      antenna_id: antennaId,
-    } = row;
+    const { mz_progressed: mzProgressed } = row;
 
     if (mzProgressed) {
-      this.push(Array.from(this.batchMap.values()));
+      this.push(this.batch);
       this.cleanBatch();
     } else {
-      if (mzDiff) {
-        this.batchMap.set(antennaId, row);
-      }
+      this.batch.push(row);
     }
     callback();
   }
 
   _flush(callback: () => void) {
-    if (this.batchMap.size) {
-      this.push(Array.from(this.batchMap.values()));
+    if (this.batch.length) {
+      this.push(this.batch);
       this.cleanBatch();
     }
     callback();

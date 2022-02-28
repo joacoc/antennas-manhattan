@@ -31,16 +31,16 @@ async function setUpMaterialize() {
   `);
 
     await poolClient.query(`
-      CREATE MATERIALIZED VIEW IF NOT EXISTS last_minute_updates AS
-      SELECT A.antenna_id, A.geojson, performance, AP.updated_at, ((CAST(EXTRACT( epoch from AP.updated_at) AS NUMERIC) * 1000) + 60000)
+      CREATE MATERIALIZED VIEW IF NOT EXISTS last_half_minute_updates AS
+      SELECT A.antenna_id, A.geojson, performance, AP.updated_at, ((CAST(EXTRACT( epoch from AP.updated_at) AS NUMERIC) * 1000) + 30000)
       FROM antennas A JOIN antennas_performance AP ON (A.antenna_id = AP.antenna_id)
-      WHERE ((CAST(EXTRACT( epoch from AP.updated_at) AS NUMERIC) * 1000) + 60000) > mz_logical_timestamp();
+      WHERE ((CAST(EXTRACT( epoch from AP.updated_at) AS NUMERIC) * 1000) + 30000) > mz_logical_timestamp();
     `);
 
     await poolClient.query(`
-      CREATE MATERIALIZED VIEW IF NOT EXISTS last_minute_performance_per_antenna AS
+      CREATE MATERIALIZED VIEW IF NOT EXISTS last_half_minute_performance_per_antenna AS
       SELECT antenna_id, geojson, AVG(performance) as performance
-      FROM last_minute_updates
+      FROM last_half_minute_updates
       GROUP BY antenna_id, geojson;
     `);
   }
@@ -76,7 +76,7 @@ async function dataGenerator() {
 
   const poolClient = await pool.connect();
   setInterval(() => {
-    const query = [1, 2, 3, 4, 5, 6, 7, 8]
+    const query = [1, 2, 3, 4, 5, 6, 7]
       .map((antennaId) => buildQuery(antennaId))
       .join("\n");
 

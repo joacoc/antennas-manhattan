@@ -91,6 +91,7 @@ export default class MaterializeClient {
          */
         let clientEnded = false;
         const endClient = () => {
+          console.log("Ending client.");
           if (clientEnded === false) {
             clientEnded = true;
             singleClient.end((err) => {
@@ -109,6 +110,7 @@ export default class MaterializeClient {
           });
 
           singleClient.on("end", () => {
+            console.log("Client end.");
             res();
           });
 
