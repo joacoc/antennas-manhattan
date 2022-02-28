@@ -1,4 +1,10 @@
-import React, { useRef, useEffect, useCallback, useMemo } from "react";
+import React, {
+  useRef,
+  useEffect,
+  useCallback,
+  useMemo,
+  useState,
+} from "react";
 import { buildPulsingDot } from "./DotClone";
 import { gql, useMutation, useSubscription } from "@apollo/client";
 import { Button, Box, ListItem, Text, UnorderedList } from "@chakra-ui/react";
@@ -126,35 +132,60 @@ function REPLACE_ME_WITH_YOUR_TOKEN() {
   );
 }
 
-function handleTailUpdate(map: Map<string, Antenna>, update: Antenna) {
+/**
+ * Tail updates require another step here to detect added and removed antennas
+ * @param antennasMap
+ * @param update
+ */
+function handleTailEventUpdate(
+  event: Antenna,
+  antennasMap: Map<string, Antenna>,
+  markSet: Set<string>,
+  runSet: Set<string>
+) {
   const {
     antenna_id: antennaId,
     diff,
     timestamp: updateTimestamp,
-    performance: updatePerformance,
-  } = update;
+    performance: antennaPerformance,
+  } = event;
+  markSet.delete(antennaId);
+  const lastEvent = antennasMap.get(antennaId);
 
-  const currentAntenna = map.get(antennaId);
+  if (lastEvent) {
+    const { timestamp: lastTimestamp, performance: lastPerformance } =
+      lastEvent;
 
-  if (diff > 0) {
-    console.log("Setting antenna: ", update);
-    map.set(antennaId, update);
-  } else {
-    console.log("Removing antenna: ", currentAntenna, update);
-    if (currentAntenna) {
-      const {
-        performance: currentAntennaPerformance,
-        timestamp: currentAntennaTimestamp,
-      } = currentAntenna;
-
-      if (
-        currentAntennaPerformance === updatePerformance &&
-        currentAntennaTimestamp <= updateTimestamp
-      ) {
-        map.delete(antennaId);
-      }
+    if (diff > 0 && lastTimestamp < updateTimestamp) {
+      antennasMap.set(antennaId, event);
+    } else if (
+      (lastPerformance === antennaPerformance &&
+        lastTimestamp <= updateTimestamp) ||
+      lastTimestamp < updateTimestamp
+    ) {
+      runSet.add(antennaId);
     }
+  } else if (diff > 0) {
+    antennasMap.set(antennaId, event);
   }
+}
+
+function createLayer(
+  id: string,
+  source: string,
+  color: string
+): mapboxgl.AnyLayer {
+  return {
+    id,
+    type: "circle",
+    source,
+    paint: {
+      "circle-radius": 70,
+      "circle-color": color,
+      "circle-opacity": 0.3,
+    },
+    filter: ["==", "$type", "Point"],
+  };
 }
 
 /**
@@ -162,29 +193,62 @@ function handleTailUpdate(map: Map<string, Antenna>, update: Antenna) {
  * @returns
  */
 export default function AntennasMap() {
+  /**
+   * References
+   */
   const mapContainer = useRef<any>(null);
   const map = useRef<MapBox>(null);
-  const antennasMapRef = useRef<Map<string, Antenna>>(new Map());
-  const helperAntennasMapRef = useRef<Map<string, Antenna>>(new Map());
-  const antennasSupportedSetRef = useRef<Set<string>>(new Set());
+  const dataRef = useRef<AntennasUpdatesSubscription | undefined>(undefined);
+  const [antennasMap, setAntennasMap] = useState<Map<string, Antenna>>(
+    new Map()
+  );
+  const [antennasSupportedSet, setAntennasSupportedSet] = useState<Set<string>>(
+    new Set()
+  );
+  const markSetRef = useRef<Set<string>>(new Set());
+
+  /**
+   * GraphQL Subscription
+   */
   const { error, data } = useSubscription<AntennasUpdatesSubscription>(
     SUBSCRIBE_ANTENNAS,
-    { fetchPolicy: "network-only", shouldResubscribe: true }
+    { fetchPolicy: "network-only" }
   );
+
+  /**
+   * GraphQL Mutations
+   */
   const [mutateFunction, { error: mutationError }] =
     useMutation<AntennasUpdatesSubscription>(MUTATE_ANTENNAS);
+
+  /**
+   * Layers Memo
+   */
+  const typesOfAntennas = useMemo(
+    () => [
+      { name: "healthy", layerColor: "#00FF00", dotColor: "0, 255, 0" },
+      { name: "unhealthy", layerColor: "#FF0000", dotColor: "255, 0, 0" },
+      { name: "semihealthy", layerColor: "#FFFF00", dotColor: "255, 255, 0" },
+      { name: "helper", layerColor: "#00FF00", dotColor: "0, 255, 0" },
+    ],
+    []
+  );
+
   const mainLayers = useMemo(
     () => [
       "healthy-antennas-layer",
       "unhealthy-antennas-layer",
       "semihealthy-antennas-layer",
-      "healthy-pulsing-dot",
-      "unhealthy-pulsing-dot",
-      "semihealthy-pulsing-dot",
+      "healthy-antennas-pulsing-dot",
+      "unhealthy-antennas-pulsing-dot",
+      "semihealthy-antennas-pulsing-dot",
     ],
     []
   );
 
+  /**
+   * GraphQL Errors logging
+   */
   if (error) {
     console.error(error);
   }
@@ -194,7 +258,7 @@ export default function AntennasMap() {
   }
 
   /**
-   * Callbacks
+   * Callbacks & Handlers
    */
   const onHighVoltageCrashClick = useCallback(
     (event) => {
@@ -207,6 +271,9 @@ export default function AntennasMap() {
     [mutateFunction]
   );
 
+  /**
+   * Handle map antennas helpers filter
+   */
   const onHelpersClick = useCallback(() => {
     const { current: mapBox } = map;
     if (mapBox) {
@@ -222,6 +289,9 @@ export default function AntennasMap() {
     }
   }, [mainLayers]);
 
+  /**
+   * Handle map main antennas filter
+   */
   const onMainClick = useCallback(() => {
     const { current: mapBox } = map;
     if (mapBox) {
@@ -231,6 +301,9 @@ export default function AntennasMap() {
     }
   }, [mainLayers]);
 
+  /**
+   * Config Map
+   */
   const onLoad = useCallback(() => {
     /**
      * Set up antenna geojson's
@@ -240,189 +313,119 @@ export default function AntennasMap() {
       /**
        * Map sources
        */
-      mapBox.addSource("helper-antennas", {
-        type: "geojson",
-        data: {
-          type: "FeatureCollection",
-          features: [],
-        },
-      });
+      typesOfAntennas.forEach(({ name, dotColor, layerColor }) => {
+        /**
+         * Add antenna source
+         */
+        mapBox.addSource(`${name}-antennas`, {
+          type: "geojson",
+          data: {
+            type: "FeatureCollection",
+            features: [],
+          },
+        });
 
-      mapBox.addSource("healthy-antennas", {
-        type: "geojson",
-        data: {
-          type: "FeatureCollection",
-          features: [],
-        },
-      });
+        /**
+         * Add antenna layer
+         */
+        if (name !== "helper") {
+          mapBox.addLayer(
+            createLayer(
+              `${name}-antennas-layer`,
+              `${name}-antennas`,
+              layerColor
+            )
+          );
+        }
 
-      mapBox.addSource("unhealthy-antennas", {
-        type: "geojson",
-        data: {
-          type: "FeatureCollection",
-          features: [],
-        },
+        /**
+         * Add antenna pulsating dot
+         */
+        addPulsingDot(
+          map,
+          `${name}-antennas-pulsing-dot`,
+          `${name}-antennas`,
+          dotColor,
+          50
+        );
       });
-
-      mapBox.addSource("semihealthy-antennas", {
-        type: "geojson",
-        data: {
-          type: "FeatureCollection",
-          features: [],
-        },
-      });
-
-      /**
-       * Map Layers
-       */
-      // Healthy antennas
-      mapBox.addLayer({
-        id: "healthy-antennas-layer",
-        type: "circle",
-        source: "healthy-antennas",
-        paint: {
-          "circle-radius": 70,
-          "circle-color": "#00FF00",
-          "circle-opacity": 0.3,
-        },
-        filter: ["==", "$type", "Point"],
-      });
-
-      // Semihealthy antennas
-      mapBox.addLayer({
-        id: "semihealthy-antennas-layer",
-        type: "circle",
-        source: "semihealthy-antennas",
-        paint: {
-          "circle-radius": 70,
-          "circle-color": "#FFFF00",
-          "circle-opacity": 0.3,
-        },
-        filter: ["==", "$type", "Point"],
-      });
-
-      // Unhealthy antennas
-      mapBox.addLayer({
-        id: "unhealthy-antennas-layer",
-        type: "circle",
-        source: "unhealthy-antennas",
-        paint: {
-          "circle-radius": 70,
-          "circle-color": "#FF0000",
-          "circle-opacity": 0.3,
-        },
-        filter: ["==", "$type", "Point"],
-      });
-
-      /**
-       * Pulsing DOT
-       */
-      addPulsingDot(
-        map,
-        "helper-antennas-pulsing-dot",
-        "helper-antennas",
-        "0, 255, 0",
-        50
-      );
-      addPulsingDot(
-        map,
-        "healthy-pulsing-dot",
-        "healthy-antennas",
-        "0, 255, 0"
-      );
-      addPulsingDot(
-        map,
-        "semihealthy-pulsing-dot",
-        "semihealthy-antennas",
-        "255, 255, 0"
-      );
-      addPulsingDot(
-        map,
-        "unhealthy-pulsing-dot",
-        "unhealthy-antennas",
-        "255, 0, 0"
-      );
     }
-  }, []);
+  }, [typesOfAntennas]);
 
   /**
    * Use effects
    */
+
+  /**
+   * Process data
+   */
   useEffect(() => {
     const { current: mapBox } = map;
-    const { current: antennasMap } = antennasMapRef;
-    const { current: helperAntennasMap } = helperAntennasMapRef;
-    const { current: antennasSupportedSet } = antennasSupportedSetRef;
+    const { current: markSet } = markSetRef;
 
-    if (data) {
+    /**
+     * Only update when there is new data
+     */
+    if (data && data !== dataRef.current) {
+      dataRef.current = data;
+
       const { antennasUpdates: antennasUpdatesData } = data;
 
       if (antennasUpdatesData && antennasUpdatesData.length > 0) {
-        antennasMap.clear();
-
-        antennasUpdatesData.forEach((antennaUpdate) => {
-          const { antenna_id } = antennaUpdate;
-
-          try {
-            const antenna = {
-              ...antennaUpdate,
-              geojson: JSON.parse(antennaUpdate.geojson),
-            };
-            antennasMap.set(antenna_id, antenna);
-          } catch (errParsing) {
-            console.error(errParsing);
-          }
-        });
-
         /**
-         * Set Up Antennas
+         * Set Up Antennas arrays
          */
         const healthy: Array<GeoJSON> = [];
         const semiHealthy: Array<GeoJSON> = [];
         const unhealthy: Array<GeoJSON> = [];
         const helpers: Array<GeoJSON> = [];
+        const runSet = new Set<string>();
+        antennasSupportedSet.clear();
 
-        Array.from(antennasMap.values()).forEach((antenna: Antenna) => {
-          const { geojson, performance, diff } = antenna;
-          const { properties } = geojson;
-          const { helps } = properties;
+        /**
+         * Parse and update antennas performance
+         */
+        antennasUpdatesData.forEach((antennaUpdate) => {
           try {
+            const { geojson: rawGeoJson } = antennaUpdate;
+            const geojson = JSON.parse(rawGeoJson);
+            const antenna = { ...antennaUpdate, geojson };
             geojson.type = "Feature";
 
-            if (diff < 0 && properties.helps) {
-              console.log(antenna);
-            }
-
-            /**
-             * Not a helper antenna
-             */
-            if (!helps) {
-              if (performance > 5) {
-                healthy.push(geojson);
-              } else if (performance < 4.75) {
-                unhealthy.push(geojson);
-              } else {
-                semiHealthy.push(geojson);
-              }
-            } else {
-              handleTailUpdate(helperAntennasMap, antenna);
-            }
+            handleTailEventUpdate(antenna, antennasMap, markSet, runSet);
           } catch (errParsing) {
             console.error(errParsing);
           }
         });
 
         /**
+         * Remove unused antennas
+         */
+        markSet.forEach((markedEventId) => {
+          console.log("Removing ", markedEventId);
+          antennasMap.delete(markedEventId);
+        });
+        markSetRef.current = runSet;
+
+        /**
          * Flap helper antennas into one array
          */
-        Array.from(helperAntennasMap.values()).forEach((helperAntenna) => {
-          const { geojson } = helperAntenna;
+        Array.from(antennasMap.values()).forEach((antenna) => {
+          const { antenna_id: antennaId, geojson, performance } = antenna;
           const { properties } = geojson;
           const { helps } = properties;
 
-          helpers.push(geojson);
-
-          if (helps) {
+          if (!helps) {
+            antennasMap.set(antennaId, antenna);
+            if (performance > 5) {
+              healthy.push(geojson);
+            } else if (performance < 4.75) {
+              unhealthy.push(geojson);
+            } else {
+              semiHealthy.push(geojson);
+            }
+          } else {
+            helpers.push(geojson);
             antennasSupportedSet.add(helps);
           }
         });
@@ -433,10 +436,16 @@ export default function AntennasMap() {
           setSourceData(mapBox, "semihealthy-antennas", semiHealthy);
           setSourceData(mapBox, "helper-antennas", helpers);
         }
+
+        setAntennasMap(new Map(antennasMap));
+        setAntennasSupportedSet(new Set(antennasSupportedSet));
       }
     }
-  }, [data]);
+  }, [antennasMap, antennasSupportedSet, data]);
 
+  /**
+   * Create the map
+   */
   useEffect(() => {
     const { current: mapBox } = map;
     if (mapBox) return;
@@ -473,7 +482,7 @@ export default function AntennasMap() {
           textAlign={"left"}
           overflow={"scroll"}
         >
-          {Array.from(antennasMapRef.current.values())
+          {Array.from(antennasMap.values())
             .filter((x) => x.geojson.properties.helps === undefined)
             .map((x) => {
               return (
@@ -490,9 +499,9 @@ export default function AntennasMap() {
                       <span style={{ fontWeight: 300 }}>Performance:</span>{" "}
                       <b>{x.performance.toString().substring(0, 4)}</b>
                     </Text>
-                    {helperAntennasMapRef.current.has(
-                      x.geojson.properties.name
-                    ) && <span>🛠️</span>}
+                    {antennasSupportedSet.has(x.geojson.properties.name) && (
+                      <span>🛠️</span>
+                    )}
                   </Box>
                   <Box display={"flex"} fontSize={"md"}>
                     <Text
@@ -530,6 +539,11 @@ export default function AntennasMap() {
           Main
         </Button>
         <Button onClick={onHelpersClick}>Helpers</Button>
+
+        <Text fontSize={"md"} marginTop="1rem">
+          {" "}
+          Total antennas deployed: {antennasMap.size}
+        </Text>
       </Box>
     </Box>
   );

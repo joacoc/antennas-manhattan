@@ -10,7 +10,6 @@ INSERT INTO antennas (geojson) VALUES ('{ "type": "Feature", "geometry": { "type
 ------ Helper Antennas
 -- W 15th St & 7th Ave (Helps Antenna ID: 1)
 INSERT INTO antennas (geojson) VALUES ('{ "type": "Feature", "geometry": { "type": "Point", "coordinates": [-73.9979, 40.7434] }, "properties": { "name": "W 21st St", "helps": "W 15th St & 7th Ave" } }');
-INSERT INTO antennas (geojson) VALUES ('{ "type": "Feature", "geometry": { "type": "Point", "coordinates": [-73.9894, 40.7357] }, "properties": { "name": "32 Union Square E", "helps": "W 15th St & 7th Ave"  } }');
 INSERT INTO antennas (geojson) VALUES ('{ "type": "Feature", "geometry": { "type": "Point", "coordinates": [-74.0066, 40.7432] }, "properties": { "name": "460-454 W 16th St", "helps": "W 15th St & 7th Ave" } }');
 INSERT INTO antennas (geojson) VALUES ('{ "type": "Feature", "geometry": { "type": "Point", "coordinates": [-74.0026, 40.7366] }, "properties": { "name": "227 W 11th St", "helps": "W 15th St & 7th Ave" } }');
 

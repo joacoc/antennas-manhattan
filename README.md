@@ -27,7 +27,7 @@ psql postgresql://postgres:pg_password@localhost:5432/postgres
 ## Let’s begin.
 
 An infrastructure working safe and healthy is critical. We, developers, know this very well. In other businesses, like in software, there are vital infrastructures, such as mobile antennas (4G, 5G) in telecommunications companies. <br/>
-If there is some issue, it needs to be detected quickly; otherwise, customers will complain, or even worse, move to the competition (churn rate is serious business).
+If there is some issue, it needs to be detected and fixed quickly; otherwise, customers will complain, or even worse, move to the competition (churn rate is serious business).
 
 Antennas manufacturers share [key performance indicators](https://www.ericsson.com/en/reports-and-papers/white-papers/performance-verification-for-5g-nr-deployments) with their telecommunications companies clients. Let's call all these indicators "performance". Rather than setting a 5G antenna manually to provide indicators, let randomness generate this value, providing even more excitement and entertainment to the case than in real life.
 
@@ -37,7 +37,9 @@ If the last-half-minute average performance is greater than 5, the antenna is he
 If it is greater than 4.75 but less than 5, it is semi-healthy. <br/>
 If it is less than 4.75, the antenna is unhealthy. <br/>
 
-All this information needs to be processed and served, and that's where Materialize will do the work for us efficiently.
+In case an antenna is unhealthy beyond a period of seconds, a whole set of helper antennas will be deployed to improve the performance in the area. After a few seconds of improvement they will be deactivated.
+
+All this information needs to be processed, analyzed, and served, and that's where Materialize will do the work for us efficiently.
 
 ## Detailes steps
 
@@ -48,10 +50,11 @@ There are different ways to achieve a result like this one using Materialize, bu
 3.  Helper process to generate the antennas random data and initialize Materialize
 4.  Node.js GraphQL API connects to Materialize using [tails](https://materialize.com/docs/sql/tail/#conceptual-framework).
 5.  React front-end displaying the information using GraphQL subscriptions.
+6.  Microservice deploying and pushing helper antennas when performance is low
 
 _Our source, Postgres, could be alternatively replaced with any other [Materialize source](https://materialize.com/docs/sql/create-source/#conceptual-framework)_
 
-![Architecture](https://user-images.githubusercontent.com/11491779/152603370-cef44fda-587b-46e9-bf67-d0b785ebee8f.png)
+![Architecture](https://user-images.githubusercontent.com/11491779/155920578-7984244a-6382-4628-a87b-00e1f6ad1acd.png)
 
 <br/>
 
@@ -109,9 +112,9 @@ GRANT SELECT ON antennas, antennas_performance TO materialize;
 
   -- Filter last half minute updates
   CREATE MATERIALIZED VIEW IF NOT EXISTS last_half_minute_updates AS
-  SELECT A.antenna_id, A.geojson, performance, AP.updated_at, ((CAST(EXTRACT( epoch from AP.updated_at) AS NUMERIC) * 1000) + 60000)
+  SELECT A.antenna_id, A.geojson, performance, AP.updated_at, ((CAST(EXTRACT( epoch from AP.updated_at) AS NUMERIC) * 1000) + 30000)
   FROM antennas A JOIN antennas_performance AP ON (A.antenna_id = AP.antenna_id)
-  WHERE ((CAST(EXTRACT( epoch from AP.updated_at) AS NUMERIC) * 1000) + 60000) > mz_logical_timestamp();
+  WHERE ((CAST(EXTRACT( epoch from AP.updated_at) AS NUMERIC) * 1000) + 30000) > mz_logical_timestamp();
 
 
   -- Aggregate by anntena ID and GeoJSON to obtain the average performance in the last half minute.
@@ -138,3 +141,5 @@ Antennas data generation statement:
    The back-end will use a modified client to run these tails. It implements internally [Node.js stream interfaces](https://nodejs.org/api/stream.html) to handle [backpressure](https://github.com/MaterializeInc/developer-experience/blob/main/mz-playground/postgres-graphql/backend/src/MaterializeClient/TailStream/index.ts), create one second batches and group all the changes in one map [(summary)](https://github.com/MaterializeInc/developer-experience/blob/main/mz-playground/postgres-graphql/backend/src/MaterializeClient/TransformStream/index.ts).
 
 5. The front-end doesn't require going deep since it will consist of only one component. Apollo GraphQL subscribes to our back-end, and the antennas information gets displayed in a list and a visual map. The frequency at which the information updates is every one second.
+
+6. The microservice behaves similar to the front-end. Rather than connecting directly to Materialize, it will subscribe to the GraphQL API and subscribe to the antenna's performance. Once a low performance has been detected multiple times a set of helper antennas will be deployed.

@@ -23,6 +23,11 @@ const graphqlClient = createClient({
   // url: "ws://localhost:4000/graphql",
   webSocketImpl: ws,
   generateID: v4,
+  on: {
+    error: (error) => {
+      console.log("Error: ", error);
+    },
+  },
 });
 
 /**
@@ -41,7 +46,7 @@ const buildQuery = (antennaId: number, value: number) => {
       INSERT INTO antennas_performance (antenna_id, clients_connected, performance, updated_at) VALUES (
         ${antennaId},
         ${Math.ceil(Math.random() * 100)},
-        ${value},
+        ${value + Math.random()},
         now()
       );
     `;
@@ -134,7 +139,7 @@ const antennasPerformanceListener = (data) => {
       const antennaCounter = performanceMapCounter.get(antennaId);
 
       if (performance < 4.75) {
-        if (antennaCounter > 5 && !alreadyImprovingSet.has(antennaId)) {
+        if (antennaCounter > 7 && !alreadyImprovingSet.has(antennaId)) {
           improveAntennaPerformance(antennaId, antennaName);
         } else {
           performanceMapCounter.set(
@@ -152,7 +157,7 @@ const antennasPerformanceListener = (data) => {
 };
 
 const onError = (err) => {
-  console.error(err);
+  console.error("Ouch. Some error: ", err);
 };
 
 const onComplete = () => {

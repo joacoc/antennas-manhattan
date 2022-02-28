@@ -1,28 +1,30 @@
 import express from "express";
 import { WebSocketServer } from "ws";
-import { useServer } from "graphql-ws/lib/use/ws";
-import { buildSchema } from "graphql";
+import { Extra, useServer } from "graphql-ws/lib/use/ws";
+import { buildSchema, parse, validate } from "graphql";
 import MaterializeClient from "./MaterializeClient";
 import EventEmitter from "events";
 import { Pool } from "pg";
+import { Context, SubscribeMessage } from "graphql-ws";
 
 /**
  * Materialize Client
  */
 const materializeClient = new MaterializeClient({
-  //   host: "localhost",
+  // host: "localhost",
   host: "materialized",
   port: 6875,
   user: "materialize",
   password: "materialize",
   database: "materialize",
+  query_timeout: 5000,
 });
 
 /**
  * Postgres Client
  */
 const postgresPool = new Pool({
-  //   host: "localhost",
+  // host: "localhost",
   host: "postgres",
   port: 5432,
   user: "postgres",
@@ -54,6 +56,11 @@ const schema = buildSchema(`
     antennasUpdates: [Antenna]
   }
 `);
+
+/**
+ * Map to follow connections and tails
+ */
+const connectionEventEmitter = new EventEmitter();
 
 /**
  * Build a custom Postgres insert with a low performance value to crash antenna
@@ -128,7 +135,9 @@ const crashAntenna = async (context) => {
 /**
  * Subscriptions
  */
-async function* antennasUpdates() {
+async function* antennasUpdates(_, ctxVars) {
+  const [subscriptionId] = ctxVars;
+
   try {
     /**
      * Yield helpers
@@ -143,7 +152,7 @@ async function* antennasUpdates() {
      */
     const eventEmmiter = new EventEmitter();
     eventEmmiter.on("data", (data) => {
-      const mappedData = data.map((x) => ({
+      const mappedData: Array<any> = data.map((x) => ({
         ...x,
         geojson: JSON.stringify(x.geojson),
         diff: x.mz_diff,
@@ -156,7 +165,6 @@ async function* antennasUpdates() {
 
     materializeClient
       .tail(
-        // "TAIL (SELECT * FROM last_half_minute_performance_per_antenna WHERE antenna_id = 1 OR antenna_id = 8 OR antenna_id = 9 OR antenna_id = 10)",
         "TAIL (SELECT * FROM last_half_minute_performance_per_antenna)",
         eventEmmiter
       )
@@ -165,32 +173,27 @@ async function* antennasUpdates() {
         console.error(tailErr);
       })
       .finally(() => {
-        console.log("Finished.");
+        console.log("Finished tail.");
         done = true;
       });
+
+    connectionEventEmitter.on("disconnect", (unsubscriptionId) => {
+      if (subscriptionId === unsubscriptionId) {
+        eventEmmiter.emit("disconnect");
+        done = true;
+      }
+    });
 
     /**
      * Yield results
      */
     while (!done) {
-      let done = false;
-
-      /**
-       * Avoid lock
-       */
-      const timeoutId = setTimeout(() => {
-        if (done === false) {
-          resolve("Timeout");
-        }
-      }, 1500);
-
       await promise;
-
-      clearTimeout(timeoutId);
-      done = true;
       yield { antennasUpdates: results };
       results = [];
     }
+
+    console.log("Outside done.");
   } catch (error) {
     console.error("Error running antennas updates subscription.");
     console.error(error);
@@ -213,6 +216,45 @@ const roots = {
 };
 
 /**
+ * Connection handlers
+ */
+const onClose = () => {
+  console.log("onClose ids");
+};
+const onConnect = () => {
+  console.log("onConnect.");
+};
+const onDisconnect = (ctx) => {
+  const ids = Object.keys(ctx.subscriptions);
+  ids.forEach((id) => connectionEventEmitter.emit("disconnect", id));
+};
+const onError = (ctx, msg, errors) => {
+  console.error("onError: ", ctx, msg, errors);
+};
+const onSubscribe: (
+  ctx: Context<Extra & Partial<Record<PropertyKey, never>>>,
+  message: SubscribeMessage
+) => any = (ctx, msg) => {
+  const ids = Object.keys(ctx.subscriptions);
+  console.log("OnSubscribe ids: ", ids);
+
+  const args = {
+    schema,
+    operationName: msg.payload.operationName,
+    document: parse(msg.payload.query),
+    variableValues: msg.payload.variables,
+  };
+
+  // dont forget to validate when returning custom execution args!
+  const errors = validate(args.schema, args.document);
+  if (errors.length > 0) {
+    return errors; // return `GraphQLError[]` to send `ErrorMessage` and stop subscription
+  }
+
+  return { ...args, contextValue: ids };
+};
+
+/**
  * Setup server
  */
 const app = express();
@@ -223,7 +265,20 @@ const server = app.listen(4000, () => {
     path: "/graphql",
   });
 
-  useServer({ schema, roots }, wsServer);
+  wsServer.on("error", (serverError) => {
+    console.error("Server error: ", serverError);
+  });
+
+  wsServer.on("connection", (ws) => {
+    ws.on("error", (socketError) => {
+      console.error("Socket error: ", socketError);
+    });
+  });
+
+  useServer(
+    { schema, roots, onClose, onDisconnect, onError, onSubscribe, onConnect },
+    wsServer
+  );
 
   console.log(
     "🚀 GraphQL web socket server listening on port 4000. \n\nUse 'ws://localhost:4000/graphql' to connect."
