@@ -292,14 +292,40 @@ export default function AntennasMap() {
   /**
    * Handle map main antennas filter
    */
-  const onMainClick = useCallback(() => {
+  const onResetClick = useCallback(() => {
     const { current: mapBox } = map;
     if (mapBox) {
-      mainLayers.forEach((layer) =>
-        mapBox.setLayoutProperty(layer, "visibility", "visible")
-      );
+      mainLayers.forEach((layer) => {
+        mapBox.setLayoutProperty(layer, "visibility", "visible");
+        mapBox.setFilter(layer);
+      });
     }
   }, [mainLayers]);
+
+  /**
+   * Handle specific antenna filter
+   */
+  const onAntennaClick = useCallback(
+    (event) => {
+      const { current: mapBox } = map;
+      if (mapBox) {
+        mainLayers.forEach((layer) => {
+          const name = event.target.id;
+          console.log(event.target);
+          console.log("Filtering layer: ", layer, " - Name: ", name);
+          mapBox.setFilter(layer, ["==", "name", name]);
+        });
+
+        // Disable helpers too
+        mapBox.setLayoutProperty(
+          "helper-antennas-pulsing-dot",
+          "visibility",
+          "none"
+        );
+      }
+    },
+    [mainLayers]
+  );
 
   /**
    * Config Map
@@ -483,6 +509,9 @@ export default function AntennasMap() {
           overflow={"scroll"}
         >
           {Array.from(antennasMap.values())
+            .sort((a, b) =>
+              Number(a.antenna_id) > Number(b.antenna_id) ? 1 : -1
+            )
             .filter((x) => x.geojson.properties.helps === undefined)
             .map((x) => {
               return (
@@ -504,15 +533,22 @@ export default function AntennasMap() {
                     )}
                   </Box>
                   <Box display={"flex"} fontSize={"md"}>
-                    <Text
+                    <Button
+                      id={x.geojson.properties.name}
                       textOverflow={"ellipsis"}
                       overflow={"hidden"}
                       whiteSpace={"nowrap"}
                       color={"gray.500"}
                       fontWeight={400}
+                      size="xs"
+                      onClick={onAntennaClick}
                     >
-                      📡 {x.geojson.properties.name}
-                    </Text>
+                      <span style={{ fontWeight: 300 }}>
+                        📡 ID: {x.antenna_id}
+                      </span>
+                      {"  -  "}
+                      {x.geojson.properties.name}
+                    </Button>
                     <Button
                       id={x.antenna_id}
                       onClick={onHighVoltageCrashClick}
@@ -535,8 +571,8 @@ export default function AntennasMap() {
         />
       </Box>
       <Box marginTop={10} marginLeft={"5rem"} textAlign="left">
-        <Button marginRight={10} onClick={onMainClick}>
-          Main
+        <Button marginRight={10} onClick={onResetClick}>
+          Reset
         </Button>
         <Button onClick={onHelpersClick}>Helpers</Button>
 
