@@ -7,6 +7,7 @@ import { Pool } from "pg";
 async function setUpMaterialize() {
   const pool = await new Pool({
     host: "materialized",
+    // host: "localhost",
     port: 6875,
     user: "materialize",
     password: "materialize",

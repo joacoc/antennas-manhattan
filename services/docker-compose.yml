@@ -1,0 +1,30 @@
+version: "3"
+services:
+  helper:
+    container_name: helper
+    build:
+      context: ./helper
+  backend:
+    container_name: backend
+    build:
+      context: ./backend
+    ports:
+      - 4000:4000
+  frontend:
+    container_name: frontend
+    build:
+      context: ./frontend
+    ports:
+      - 3000:3000
+    depends_on:
+      - backend
+  microservice:
+    container_name: microservice
+    build:
+      context: ./microservice
+    depends_on:
+      - backend
+networks:
+  default:
+    external:
+      name: custom-driver
