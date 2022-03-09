@@ -22,7 +22,7 @@ async function setUpMaterialize() {
   `);
 
   const { rowCount } = await pool.query(
-    "SELECT * FROM mz_views WHERE name='antennas' OR name='antennas_performance' OR name='helper_antennas';"
+    "SELECT * FROM mz_views WHERE name='antennas' OR name='antennas_performance';"
   );
 
   if (!rowCount) {
@@ -39,8 +39,7 @@ async function setUpMaterialize() {
         AP.updated_at,
         ((CAST(EXTRACT( epoch from AP.updated_at) AS NUMERIC) * 1000) + 30000)
       FROM antennas A
-        JOIN antennas_performance AP ON (A.antenna_id = AP.antenna_id)
-        JOIN helper_antennas HA ON (HA.antenna_id = AP.antenna_id)
+      JOIN antennas_performance AP ON (A.antenna_id = AP.antenna_id)
       WHERE ((CAST(EXTRACT( epoch from AP.updated_at) AS NUMERIC) * 1000) + 30000) > mz_logical_timestamp();
     `);
 

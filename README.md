@@ -67,13 +67,6 @@ CREATE TABLE antennas (
     geojson JSON NOT NULL
 );
 
--- Antennas table will contain the identifier and geojson for each helper antenna.
-CREATE TABLE helper_antennas (
-    antenna_id INT GENERATED ALWAYS AS IDENTITY,
-    geojson JSON NOT NULL
-);
-
-
 -- Antennas performance table will contain every performance update available
 CREATE TABLE antennas_performance (
     antenna_id INT,
@@ -83,25 +76,22 @@ CREATE TABLE antennas_performance (
 );
 
 -- Cost per antenna
-CREATE TABLE cost_per_antennas (
+CREATE TABLE cost_per_antenna (
     antenna_id INT,
     cost INT NOT NULL
 );
 
-
 -- Enable REPLICA for both tables
 ALTER TABLE antennas REPLICA IDENTITY FULL;
-ALTER TABLE helper_antennas REPLICA IDENTITY FULL;
 ALTER TABLE antennas_performance REPLICA IDENTITY FULL;
-
+ALTER TABLE cost_per_antenna REPLICA IDENTITY FULL;
 
 -- Create publication on the created tables
-CREATE PUBLICATION antennas_publication_source FOR TABLE antennas, helper_antennas, antennas_performance;
-
+CREATE PUBLICATION antennas_publication_source FOR TABLE antennas, antennas_performance, cost_per_antenna;
 
 -- Create user and role to be used by Materialize
 CREATE ROLE materialize REPLICATION LOGIN PASSWORD 'materialize';
-GRANT SELECT ON antennas, helper_antennas, antennas_performance TO materialize;
+GRANT SELECT ON antennas, antennas_performance, cost_per_antenna TO materialize;
 ```
 
 <br/>
@@ -110,8 +100,6 @@ GRANT SELECT ON antennas, helper_antennas, antennas_performance TO materialize;
 
 ```sql
   -- All these queries run inside the helper process.
-
-
   -- Create the Postgres Source
   CREATE MATERIALIZED SOURCE IF NOT EXISTS antennas_publication_source
   FROM POSTGRES
@@ -133,7 +121,6 @@ GRANT SELECT ON antennas, helper_antennas, antennas_performance TO materialize;
     ((CAST(EXTRACT( epoch from AP.updated_at) AS NUMERIC) * 1000) + 30000)
   FROM antennas A
     JOIN antennas_performance AP ON (A.antenna_id = AP.antenna_id)
-    JOIN helper_antennas HA ON (HA.antenna_id = AP.antenna_id)
   WHERE ((CAST(EXTRACT( epoch from AP.updated_at) AS NUMERIC) * 1000) + 30000) > mz_logical_timestamp();
 
 
