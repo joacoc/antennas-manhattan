@@ -67,6 +67,12 @@ CREATE TABLE antennas (
     geojson JSON NOT NULL
 );
 
+-- Antennas table will contain the identifier and geojson for each helper antenna.
+CREATE TABLE helper_antennas (
+    antenna_id INT GENERATED ALWAYS AS IDENTITY,
+    geojson JSON NOT NULL
+);
+
 
 -- Antennas performance table will contain every performance update available
 CREATE TABLE antennas_performance (
@@ -76,19 +82,26 @@ CREATE TABLE antennas_performance (
     updated_at timestamp NOT NULL
 );
 
+-- Cost per antenna
+CREATE TABLE cost_per_antennas (
+    antenna_id INT,
+    cost INT NOT NULL
+);
+
 
 -- Enable REPLICA for both tables
 ALTER TABLE antennas REPLICA IDENTITY FULL;
+ALTER TABLE helper_antennas REPLICA IDENTITY FULL;
 ALTER TABLE antennas_performance REPLICA IDENTITY FULL;
 
 
 -- Create publication on the created tables
-CREATE PUBLICATION antennas_publication_source FOR TABLE antennas, antennas_performance;
+CREATE PUBLICATION antennas_publication_source FOR TABLE antennas, helper_antennas, antennas_performance;
 
 
 -- Create user and role to be used by Materialize
 CREATE ROLE materialize REPLICATION LOGIN PASSWORD 'materialize';
-GRANT SELECT ON antennas, antennas_performance TO materialize;
+GRANT SELECT ON antennas, helper_antennas, antennas_performance TO materialize;
 ```
 
 <br/>
@@ -112,16 +125,26 @@ GRANT SELECT ON antennas, antennas_performance TO materialize;
 
   -- Filter last half minute updates
   CREATE MATERIALIZED VIEW IF NOT EXISTS last_half_minute_updates AS
-  SELECT A.antenna_id, A.geojson, performance, AP.updated_at, ((CAST(EXTRACT( epoch from AP.updated_at) AS NUMERIC) * 1000) + 30000)
-  FROM antennas A JOIN antennas_performance AP ON (A.antenna_id = AP.antenna_id)
+  SELECT
+    A.antenna_id,
+    A.geojson,
+    performance,
+    AP.updated_at,
+    ((CAST(EXTRACT( epoch from AP.updated_at) AS NUMERIC) * 1000) + 30000)
+  FROM antennas A
+    JOIN antennas_performance AP ON (A.antenna_id = AP.antenna_id)
+    JOIN helper_antennas HA ON (HA.antenna_id = AP.antenna_id)
   WHERE ((CAST(EXTRACT( epoch from AP.updated_at) AS NUMERIC) * 1000) + 30000) > mz_logical_timestamp();
 
 
   -- Aggregate by anntena ID and GeoJSON to obtain the average performance in the last half minute.
   CREATE MATERIALIZED VIEW IF NOT EXISTS last_half_minute_performance_per_antenna AS
-  SELECT antenna_id, geojson, AVG(performance) as performance
-  FROM last_half_minute_updates
-  GROUP BY antenna_id, geojson;
+    SELECT
+      antenna_id,
+      geojson,
+      AVG(performance) as performance
+    FROM last_half_minute_updates
+    GROUP BY antenna_id, geojson;
 ```
 
 Antennas data generation statement:

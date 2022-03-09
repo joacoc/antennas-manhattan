@@ -164,14 +164,16 @@ const onComplete = () => {
   console.log("Finished.");
 };
 
-graphqlClient.subscribe(
-  {
-    query:
-      "subscription { antennasUpdates { antenna_id, geojson, performance } }",
-  },
-  {
-    next: antennasPerformanceListener,
-    error: onError,
-    complete: onComplete,
-  }
-);
+setTimeout(() => {
+  graphqlClient.subscribe(
+    {
+      query:
+        "subscription { antennasUpdates { antenna_id, geojson, performance } }",
+    },
+    {
+      next: antennasPerformanceListener,
+      error: onError,
+      complete: onComplete,
+    }
+  );
+}, 5000);

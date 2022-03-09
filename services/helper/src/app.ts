@@ -7,7 +7,6 @@ import { Pool } from "pg";
 async function setUpMaterialize() {
   const pool = await new Pool({
     host: "materialized",
-    // host: "localhost",
     port: 6875,
     user: "materialize",
     password: "materialize",
@@ -23,7 +22,7 @@ async function setUpMaterialize() {
   `);
 
   const { rowCount } = await pool.query(
-    "SELECT * FROM mz_views WHERE name='antennas' OR name='antennas_performance';"
+    "SELECT * FROM mz_views WHERE name='antennas' OR name='antennas_performance' OR name='helper_antennas';"
   );
 
   if (!rowCount) {
@@ -33,8 +32,15 @@ async function setUpMaterialize() {
 
     await poolClient.query(`
       CREATE MATERIALIZED VIEW IF NOT EXISTS last_half_minute_updates AS
-      SELECT A.antenna_id, A.geojson, performance, AP.updated_at, ((CAST(EXTRACT( epoch from AP.updated_at) AS NUMERIC) * 1000) + 30000)
-      FROM antennas A JOIN antennas_performance AP ON (A.antenna_id = AP.antenna_id)
+      SELECT
+        A.antenna_id,
+        A.geojson,
+        performance,
+        AP.updated_at,
+        ((CAST(EXTRACT( epoch from AP.updated_at) AS NUMERIC) * 1000) + 30000)
+      FROM antennas A
+        JOIN antennas_performance AP ON (A.antenna_id = AP.antenna_id)
+        JOIN helper_antennas HA ON (HA.antenna_id = AP.antenna_id)
       WHERE ((CAST(EXTRACT( epoch from AP.updated_at) AS NUMERIC) * 1000) + 30000) > mz_logical_timestamp();
     `);
 
@@ -66,6 +72,33 @@ function buildQuery(antennaId: number) {
 }
 
 /**
+ * Build a custom Postgres insert with a random performance and clients connected
+ * @param antennaId Antenna Identifier
+ * @returns
+ */
+function buildHistoryQuery(antennaId: number, day: number) {
+  return `
+    INSERT INTO antennas_performance (antenna_id, clients_connected, performance, updated_at) VALUES (
+      ${antennaId},
+      ${Math.ceil(Math.random() * 100)},
+      ${Math.random() * 10},
+      NOW() - INTERVAL '${day} day'
+    );
+  `;
+}
+
+/**
+ * Get a random number
+ * @param min
+ * @param max
+ * @returns
+ */
+function randomIntFromInterval(min, max) {
+  // min and max included
+  return Math.floor(Math.random() * (max - min + 1) + min);
+}
+
+/**
  * Generate data to Postgres indefinitely
  */
 async function dataGenerator() {
@@ -75,14 +108,39 @@ async function dataGenerator() {
     password: "pg_password",
   });
 
-  const poolClient = await pool.connect();
+  const intervalClient = await pool.connect();
   setInterval(() => {
     const query = [1, 2, 3, 4, 5, 6, 7]
       .map((antennaId) => buildQuery(antennaId))
       .join("\n");
 
-    poolClient.query(query);
+    intervalClient.query(query);
   }, 1000);
+
+  const historyClient = await pool.connect();
+  let day = 1;
+
+  while (day < 365) {
+    let antennaId = 1;
+    const queries = new Array<string>();
+
+    while (antennaId <= 7) {
+      queries.push(buildHistoryQuery(antennaId, day));
+      antennaId += 1;
+    }
+
+    let randomEvents = 1;
+    while (randomEvents <= 100) {
+      queries.push(buildHistoryQuery(randomIntFromInterval(8, 34), day));
+      randomEvents += 1;
+    }
+
+    const query = queries.join("\n");
+    await historyClient.query(query);
+    day += 1;
+  }
+
+  console.log("Finished loading history.");
 }
 
 setUpMaterialize()

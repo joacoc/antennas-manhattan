@@ -4,12 +4,24 @@ CREATE TABLE antennas (
     geojson JSON NOT NULL
 );
 
+-- Antennas table will contain the identifier and geojson for each helper antenna.
+CREATE TABLE helper_antennas (
+    antenna_id INT GENERATED ALWAYS AS IDENTITY,
+    geojson JSON NOT NULL
+);
+
 -- Antennas performance table will contain every performance update available
 CREATE TABLE antennas_performance (
     antenna_id INT,
     clients_connected INT NOT NULL,
     performance INT NOT NULL,
     updated_at timestamp NOT NULL
+);
+
+-- Cost per antenna
+CREATE TABLE cost_per_antenna (
+    antenna_id INT,
+    cost INT NOT NULL
 );
 
 -- Enable REPLICA for both tables
