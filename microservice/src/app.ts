@@ -2,12 +2,15 @@ import { Pool } from "pg";
 import { v4 } from "uuid";
 import ws from "ws";
 import { createClient } from "graphql-ws";
+import { Kafka } from "kafkajs"
+
+const antennasEventsTopicName = "antennas_performance";
 
 /**
- * Postgres Client
+ * Materialize Client
  */
 const postgresPool = new Pool({
-  host: "postgres",
+  host: "materialized",
   // host: "localhost",
   port: 5432,
   user: "postgres",
@@ -31,6 +34,18 @@ const graphqlClient = createClient({
 });
 
 /**
+ * Kafka client
+ */
+const brokers = [process.env.KAFKA_BROKER || "localhost:9092"];
+
+const kafka = new Kafka({
+  clientId: "kafkaClient",
+  brokers,
+});
+const producer = kafka.producer();
+producer.connect().catch((err) => { console.log(err); process.exit(1); });
+
+/**
  * Map to follow bad performance antennas
  */
 const performanceMapCounter = new Map<string, number>();
@@ -41,16 +56,15 @@ const alreadyImprovingSet = new Set<string>();
  * @param antennaId Antenna Identifier
  * @returns
  */
-const buildQuery = (antennaId: number, value: number) => {
-  return `
-      INSERT INTO antennas_performance (antenna_id, clients_connected, performance, updated_at) VALUES (
-        ${antennaId},
-        ${Math.ceil(Math.random() * 100)},
-        ${value + Math.random()},
-        now()
-      );
-    `;
-};
+const buildEvent = (antennaId: number, value: number) => {
+  return {
+    antennaId,
+    clients_connected: Math.ceil(Math.random() * 100),
+    performance: value,
+    updated_at: new Date().getTime()
+  };
+}
+
 
 /**
  * Find and enable helper antennas
@@ -96,13 +110,15 @@ const improveAntennaPerformance = async (antennaId, antennaName) => {
     } else {
       let count = 0;
       const intervalId = setInterval(async () => {
-        const query =
-          buildQuery(antennaId, 7.5) +
-          "\n" +
-          helperAntennas.map((x) => buildQuery(x.antenna_id, 5)).join("\n");
+        const events = [buildEvent(antennaId, 7.5), ...helperAntennas.map((x) => buildEvent(x.antenna_id, 5))]
+          .map((event) => ({ value: JSON.stringify(event) }));
+
         count += 1;
         try {
-          await postgresClient.query(query);
+          producer.send({
+            topic: antennasEventsTopicName,
+            messages: events,
+          });
         } catch (clientErr) {
           console.error(clientErr);
         } finally {

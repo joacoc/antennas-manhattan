@@ -1,4 +1,9 @@
 import { Pool } from "pg";
+import { Kafka } from "kafkajs";
+import { helperAntennas, mainAntennas } from "./data";
+
+const antennasEventsTopicName = "antennas_performance";
+const antennasTopic = "antennas";
 
 /**
  * Create Materialize sources and materialized views
@@ -15,20 +20,24 @@ async function setUpMaterialize() {
   const poolClient = await pool.connect();
 
   await poolClient.query(`
-    CREATE MATERIALIZED SOURCE IF NOT EXISTS antennas_publication_source
-    FROM POSTGRES
-    CONNECTION 'host=postgres port=5432 user=materialize password=materialize dbname=postgres'
-    PUBLICATION 'antennas_publication_source';
+    CREATE MATERIALIZED SOURCE IF NOT EXISTS antennas_performance
+    FROM KAFKA BROKER 'broker:29092' TOPIC '${antennasEventsTopicName}'
+    WITH (kafka_time_offset = 0)
+    FORMAT BYTES;
+  `);
+
+  await poolClient.query(`
+    CREATE MATERIALIZED SOURCE IF NOT EXISTS antennas
+    FROM KAFKA BROKER 'broker:29092' TOPIC '${antennasTopic}'
+    WITH (kafka_time_offset = 0)
+    FORMAT BYTES;
   `);
 
   const { rowCount } = await pool.query(
-    "SELECT * FROM mz_views WHERE name='antennas' OR name='antennas_performance';"
+    "SHOW sources WHERE name='antennas' OR name='antennas_performance';"
   );
 
   if (!rowCount) {
-    await poolClient.query(`
-    CREATE MATERIALIZED VIEWS FROM SOURCE antennas_publication_source;
-  `);
 
     await poolClient.query(`
       CREATE MATERIALIZED VIEW IF NOT EXISTS last_half_minute_updates AS
@@ -53,34 +62,63 @@ async function setUpMaterialize() {
  * @param antennaId Antenna Identifier
  * @returns
  */
-function buildQuery(antennaId: number) {
-  return `
-    INSERT INTO antennas_performance (antenna_id, clients_connected, performance, updated_at) VALUES (
-      ${antennaId},
-      ${Math.ceil(Math.random() * 100)},
-      ${Math.random() * 10},
-      now()
-    );
-  `;
+function buildEvent(antennaId: number) {
+  return {
+    antennaId,
+    clients_connected: Math.ceil(Math.random() * 100),
+    performance: Math.random() * 10,
+    updated_at: new Date().getTime()
+  };
 }
 
 /**
  * Generate data to Postgres indefinitely
  */
 async function dataGenerator() {
-  const pool = await new Pool({
-    host: "postgres",
-    user: "postgres",
-    password: "pg_password",
+  const brokers = [process.env.KAFKA_BROKER || "localhost:9092"];
+
+  const kafka = new Kafka({
+    clientId: "kafkaClient",
+    brokers,
   });
 
-  const poolClient = await pool.connect();
-  setInterval(() => {
-    const query = [1, 2, 3, 4, 5, 6, 7]
-      .map((antennaId) => buildQuery(antennaId))
-      .join("\n");
+  const topics = await kafka.admin().listTopics();
+  const producer = kafka.producer();
+  await producer.connect();
 
-    poolClient.query(query);
+  if (!topics.includes(antennasEventsTopicName)) {
+    await kafka.admin().createTopics({
+      topics: [
+        {
+          topic: antennasEventsTopicName,
+        },
+        {
+          topic: antennasTopic,
+        }
+      ],
+    });
+
+    producer.send({
+      topic: antennasTopic,
+      messages: mainAntennas.map(antenna => ({ value: JSON.stringify(antenna) })),
+    })
+
+    producer.send({
+      topic: antennasTopic,
+      messages: helperAntennas.map(antenna => ({ value: JSON.stringify(antenna) })),
+    })
+  }
+
+
+  setInterval(() => {
+    const events = [1, 2, 3, 4, 5, 6, 7]
+      .map((antennaId) => buildEvent(antennaId))
+      .map((event) => ({ value: JSON.stringify(event) }));
+
+    producer.send({
+      topic: antennasEventsTopicName,
+      messages: events,
+    });
   }, 1000);
 }
 
