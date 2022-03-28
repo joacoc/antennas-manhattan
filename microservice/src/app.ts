@@ -9,13 +9,13 @@ const antennasEventsTopicName = "antennas_performance";
 /**
  * Materialize Client
  */
-const postgresPool = new Pool({
+const materializePool = new Pool({
   host: "materialized",
   // host: "localhost",
-  port: 5432,
-  user: "postgres",
-  password: "pg_password",
-  database: "postgres",
+  port: 6875,
+  user: "materialize",
+  password: "materialize",
+  database: "materialize",
 });
 
 /**
@@ -58,7 +58,7 @@ const alreadyImprovingSet = new Set<string>();
  */
 const buildEvent = (antennaId: number, value: number) => {
   return {
-    antennaId,
+    antenna_id: antennaId,
     clients_connected: Math.ceil(Math.random() * 100),
     performance: value,
     updated_at: new Date().getTime()
@@ -73,16 +73,16 @@ const buildEvent = (antennaId: number, value: number) => {
 const findHelperAntennas = (
   antennaName
 ): Promise<Array<{ antenna_id: number }>> => {
-  const query = `SELECT antenna_id FROM antennas WHERE CAST(CAST(geojson as json)->>'properties' as json)->>'helps' = '${antennaName}';`;
+  const query = `SELECT antenna_id FROM parsed_antennas WHERE CAST(geojson->>'properties' as json)->>'helps' = '${antennaName}';`;
   let helperAntennas = [];
 
   return new Promise((res) => {
-    postgresPool.connect(async (err, postgresClient, done) => {
+    materializePool.connect(async (err, materializeClient, done) => {
       if (err) {
         console.error(err);
       } else {
         try {
-          const results = await postgresClient.query(query);
+          const results = await materializeClient.query(query);
           helperAntennas = results.rows;
         } catch (clientErr) {
           console.error(clientErr);
@@ -104,37 +104,30 @@ const improveAntennaPerformance = async (antennaId, antennaName) => {
   /**
    * Improve antenna performance
    */
-  postgresPool.connect((err, postgresClient, done) => {
-    if (err) {
-      console.error(err);
-    } else {
-      let count = 0;
-      const intervalId = setInterval(async () => {
-        const events = [buildEvent(antennaId, 7.5), ...helperAntennas.map((x) => buildEvent(x.antenna_id, 5))]
-          .map((event) => ({ value: JSON.stringify(event) }));
+  let count = 0;
+  const intervalId = setInterval(async () => {
+    const events = [buildEvent(antennaId, 7.5), ...helperAntennas.map((x) => buildEvent(x.antenna_id, 5))]
+      .map((event) => ({ value: JSON.stringify(event) }));
 
-        count += 1;
-        try {
-          producer.send({
-            topic: antennasEventsTopicName,
-            messages: events,
-          });
-        } catch (clientErr) {
-          console.error(clientErr);
-        } finally {
-          /**
-           * Clean set and interval
-           */
-          if (count === 100) {
-            console.log(`Stopping interval for ${antennaId}`);
-            clearInterval(intervalId);
-            alreadyImprovingSet.delete(antennaId);
-            done();
-          }
-        }
-      }, 250);
+    count += 1;
+    try {
+      producer.send({
+        topic: antennasEventsTopicName,
+        messages: events,
+      });
+    } catch (clientErr) {
+      console.error(clientErr);
+    } finally {
+      /**
+       * Clean set and interval
+       */
+      if (count === 100) {
+        console.log(`Stopping interval for ${antennaId}`);
+        clearInterval(intervalId);
+        alreadyImprovingSet.delete(antennaId);
+      }
     }
-  });
+  }, 250);
 };
 
 /**

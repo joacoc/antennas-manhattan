@@ -32,8 +32,6 @@ services:
     restart: always
     ports:
       - 6875:6875
-    depends_on:
-      - postgres
 
   grafana_dashboard:
     image: materialize/dashboard
@@ -52,6 +50,9 @@ services:
       context: ./helper
     depends_on:
       - materialized
+    command: sh -c "dockerize -wait tcp://zookeeper:2181 -wait tcp://broker:29092 -wait tcp://materialized:6875 -timeout 80s npm start"
+    environment:
+      KAFKA_BROKER: broker:29092
 
   backend:
     container_name: backend
@@ -61,6 +62,7 @@ services:
       - 4000:4000
     depends_on:
       - materialized
+      - helper
 
   frontend:
     container_name: frontend
@@ -76,4 +78,7 @@ services:
     build:
       context: ./microservice
     depends_on:
-      - backend
+      - helper
+    command: sh -c "dockerize -wait tcp://zookeeper:2181 -wait tcp://broker:29092 -wait tcp://materialized:6875 -timeout 80s npm start"
+    environment:
+      KAFKA_BROKER: broker:29092
