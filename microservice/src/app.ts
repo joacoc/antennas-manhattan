@@ -30,6 +30,9 @@ const graphqlClient = createClient({
     error: (error) => {
       console.log("Error: ", error);
     },
+    closed: () => {
+      console.log("Closed");
+    }
   },
 });
 
@@ -79,13 +82,13 @@ const findHelperAntennas = (
   return new Promise((res) => {
     materializePool.connect(async (err, materializeClient, done) => {
       if (err) {
-        console.error(err);
+        console.log(err);
       } else {
         try {
           const results = await materializeClient.query(query);
           helperAntennas = results.rows;
         } catch (clientErr) {
-          console.error(clientErr);
+          console.log(clientErr);
         } finally {
           done();
           res(helperAntennas);
@@ -106,7 +109,8 @@ const improveAntennaPerformance = async (antennaId, antennaName) => {
    */
   let count = 0;
   const intervalId = setInterval(async () => {
-    const events = [buildEvent(antennaId, 7.5), ...helperAntennas.map((x) => buildEvent(x.antenna_id, 5))]
+
+    const events = [buildEvent(Number(antennaId), 7.5), ...helperAntennas.map((x) => buildEvent(x.antenna_id, 5))]
       .map((event) => ({ value: JSON.stringify(event) }));
 
     count += 1;
@@ -160,18 +164,19 @@ const antennasPerformanceListener = (data) => {
         performanceMapCounter.delete(antennaId);
       }
     } catch (errParsing) {
-      console.error(errParsing);
+      console.log(errParsing);
     }
   });
 };
 
 const onError = (err) => {
-  console.error("Ouch. Some error: ", err);
+  console.log("Ouch. Some error: ", err);
 };
 
 const onComplete = () => {
   console.log("Finished.");
 };
+
 
 graphqlClient.subscribe(
   {
