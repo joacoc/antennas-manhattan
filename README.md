@@ -51,7 +51,7 @@ There are different ways to achieve a result like this one using Materialize, bu
 
 _Our source, Kafka, could be alternatively replaced with any other [Materialize source](https://materialize.com/docs/sql/create-source/#conceptual-framework)_
 
-![Architecture](https://user-images.githubusercontent.com/11491779/155920578-7984244a-6382-4628-a87b-00e1f6ad1acd.png)
+<!-- ![Architecture](https://user-images.githubusercontent.com/11491779/155920578-7984244a-6382-4628-a87b-00e1f6ad1acd.png) -->
 
 <br/>
 
