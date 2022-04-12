@@ -102,12 +102,12 @@ The SQL script to build Materialize schema is the next one:
 
   -- Create the Kafka Source
     CREATE SOURCE IF NOT EXISTS antennas_performance
-    FROM KAFKA BROKER 'broker:29092' TOPIC '${antennasEventsTopicName}'
+    FROM KAFKA BROKER 'broker:29092' TOPIC 'antennas_performance'
     WITH (kafka_time_offset = 0)
     FORMAT BYTES;
     
     CREATE SOURCE IF NOT EXISTS antennas
-    FROM KAFKA BROKER 'broker:29092' TOPIC '${antennasTopic}'
+    FROM KAFKA BROKER 'broker:29092' TOPIC 'antennas'
     WITH (kafka_time_offset = 0)
     FORMAT BYTES;
     
@@ -126,7 +126,7 @@ The SQL script to build Materialize schema is the next one:
         )
       );
 
-  -- Parse and filter last minute updates
+  -- Parse and save only the last minute updates to save memory
       CREATE MATERIALIZED VIEW IF NOT EXISTS last_minute_antennas_performance AS
       SELECT
         CAST(parsed_data->'antenna_id' AS INT) as antenna_id,
@@ -160,7 +160,7 @@ The SQL script to build Materialize schema is the next one:
 Antennas data generation statement:
 
 ```javascript
-  -- Insert data using the helper process.
+  /* Insert data using the helper process. */
   function buildEvent(antennaId: number) {
       return {
         antenna_id: antennaId,
