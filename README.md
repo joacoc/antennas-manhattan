@@ -1,6 +1,6 @@
 # Manhattan Antennas Performance
 
-https://user-images.githubusercontent.com/11491779/152449609-a943678f-b90d-4ff8-8294-96a2b459f6bc.mp4
+https://github.com/joacoc/antennas-manhattan/assets/11491779/38d5a50b-b6e5-4596-8b0c-c6a4e0cd08bd
 
 If you want to try it right now, clone the project and run:
 
